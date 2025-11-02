@@ -4,14 +4,22 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "server:install": "cd server && npm install",
+    "server:dev": "cd server && npm run dev",
+    "server:start": "cd server && npm start",
+    "worker:install": "cd worker && npm install",
+    "worker:dev": "cd worker && npm run dev",
+    "worker:deploy": "cd worker && npm run deploy",
+    "worker:deploy:production": "cd worker && npm run deploy:production"
   },
   "dependencies": {
     "@cardano-foundation/cardano-connect-with-wallet": "^0.2.15",
     "@cardano-foundation/cardano-connect-with-wallet-core": "^0.2.8",
+    "bech32": "^2.0.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.4"
   },

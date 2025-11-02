@@ -295,14 +295,11 @@ const CardanoWalletConnector = forwardRef<WalletConnectorRef, CardanoWalletConne
             (error.message.includes("account changed") ||
               error.message.includes("Account changed"))
           ) {
-            if (retries > 0) {
-              await new Promise((resolve) => setTimeout(resolve, 500));
-              continue;
-            } else {
-              const newWalletApi = await window.cardano[walletName].enable();
-              walletApi = newWalletApi;
-              await new Promise((resolve) => setTimeout(resolve, 200));
-              stakeAddresses = await newWalletApi.getRewardAddresses();
+            // Re-enable to get a fresh API for the new account
+            walletApi = await window.cardano[walletName].enable();
+            await new Promise((resolve) => setTimeout(resolve, retries > 0 ? 500 : 200));
+            if (retries <= 0) {
+              stakeAddresses = await walletApi.getRewardAddresses();
               break;
             }
           } else {
