@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@cardano-foundation/cardano-connect-with-wallet": "^0.2.15",
+    "@cardano-foundation/cardano-connect-with-wallet-core": "^0.2.8",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
