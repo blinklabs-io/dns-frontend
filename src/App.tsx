@@ -4,6 +4,7 @@ import type { WalletConnectorRef } from "./components/WalletConnector";
 import { NetworkType } from "@cardano-foundation/cardano-connect-with-wallet-core";
 import SldMintPanel from "./components/SldMintPanel";
 import type { MintSldPlanFullRequest } from "./api/transactions";
+import { lookupTldOwner } from "./api/transactions";
 import { bech32 } from "bech32";
 
 /**
@@ -60,7 +61,11 @@ type WalletApi = {
 export default function App() {
   const walletRef = useRef<WalletConnectorRef>(null);
   const [prefill, setPrefill] = useState<Partial<MintSldPlanFullRequest> | null>(null);
-  const prefillKey = prefill ? JSON.stringify(prefill) : "no-prefill";
+  // Exclude ownerAddress from the key so the async on-chain lookup doesn't
+  // remount SldMintPanel and discard user input (e.g. sldName).
+  const prefillKey = prefill
+    ? JSON.stringify({ ...prefill, ownerAddress: undefined })
+    : "no-prefill";
   const [isLoadingDefaults, setIsLoadingDefaults] = useState(false);
   const [walletApi, setWalletApi] = useState<WalletApi | null>(null);
 
@@ -79,7 +84,6 @@ export default function App() {
       setPrefill((prev) => ({
         ...prev,
         userAddress: bech32Address,
-        ownerAddress: prev?.ownerAddress || bech32Address,
       }));
     } catch (error) {
       console.error("Failed to read address from wallet", error);
@@ -94,13 +98,11 @@ export default function App() {
 
     const fetchDefaults = async (signal: AbortSignal) => {
       const staticDefaults: Partial<MintSldPlanFullRequest> = {
-        // Preprod defaults (provided values so we do not depend on fetching) - switch to environment variables later
+        // Preprod defaults - switch to environment variables later
         tldName: "hello-handshake",
-        sldName: "mysld",
+        sldName: "",
         csTld: "694cb48da919e928b3e51c4648f051326ac150eaa9436792ec7a6e35",
         csSld: "96512d4c426d912ba453014e74a57d655dfb3980154c4de106f69320",
-        ownerAddress:
-          "addr_test1qzxgt625pyaz2mclwtz5ez0yvcanhz3p9lf0qe3knxryyda33aulwhgg303hnn6ygga0u8gr6avcy0qq45t6fvchen9qd2q83d",
         tldRefAddress: "addr_test1zp55edyd4yv7j29nu5wyvj8s2yex4s2sa255xeuja3axudvxu36kavd5fjg7km4qk6umypqlvq9sa6ghyzhl9k8glg8q6prskn",
         sldRefAddress: "addr_test1zzt9zt2vgfkez2ay2vq5ua9904j4m7eesq25cn0pqmmfxgyxu36kavd5fjg7km4qk6umypqlvq9sa6ghyzhl9k8glg8qc9ljcz",
         tldReferenceRef: {
@@ -113,7 +115,7 @@ export default function App() {
         },
         minLovelaceTldRef: 2_000_000,
         minLovelaceOwner: 1_262_830,
-        minLovelaceSldRef: 1_435_230,
+        minLovelaceSldRef: 2_000_000,
       };
 
       const envDefaults: Partial<MintSldPlanFullRequest> = {
@@ -131,29 +133,48 @@ export default function App() {
 
       const remoteUrl = import.meta.env.VITE_SLD_DEFAULTS_URL as string | undefined;
 
+      // Track the resolved values so the owner lookup uses the final csTld/tldName
+      let resolvedDefaults = { ...staticDefaults, ...envDefaults };
+
+      // Apply static/env/remote defaults (ownerAddress always comes from on-chain lookup)
       if (!remoteUrl) {
         setPrefill((prev) => ({ ...staticDefaults, ...envDefaults, ...prev }));
-        return;
+      } else {
+        try {
+          setIsLoadingDefaults(true);
+          const res = await fetch(remoteUrl, { signal });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars -- strip ownerAddress; it only comes from on-chain lookup
+          const { ownerAddress: _stripped, ...json } = (await res.json()) as Partial<MintSldPlanFullRequest>;
+          if (signal.aborted) return;
+          resolvedDefaults = { ...resolvedDefaults, ...json };
+          setPrefill((prev) => ({
+            ...staticDefaults,
+            ...envDefaults,
+            ...json,
+            ...prev,
+          }));
+        } catch (error) {
+          if (signal.aborted) return;
+          console.warn("Failed to load remote SLD defaults; falling back to env defaults", error);
+          setPrefill((prev) => ({ ...staticDefaults, ...envDefaults, ...prev }));
+        } finally {
+          if (!signal.aborted) setIsLoadingDefaults(false);
+        }
       }
 
-      try {
-        setIsLoadingDefaults(true);
-        const res = await fetch(remoteUrl, { signal });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as Partial<MintSldPlanFullRequest>;
-        if (signal.aborted) return;
-        setPrefill((prev) => ({
-          ...staticDefaults,
-          ...envDefaults,
-          ...json,
-          ...prev,
-        }));
-      } catch (error) {
-        if (signal.aborted) return;
-        console.warn("Failed to load remote SLD defaults; falling back to env defaults", error);
-        setPrefill((prev) => ({ ...staticDefaults, ...envDefaults, ...prev }));
-      } finally {
-        if (!signal.aborted) setIsLoadingDefaults(false);
+      // Look up TLD owner address on-chain (the only source for ownerAddress)
+      const csTld = resolvedDefaults.csTld as string | undefined;
+      const tldName = resolvedDefaults.tldName as string | undefined;
+      if (csTld && tldName) {
+        try {
+          const { ownerAddress } = await lookupTldOwner(csTld, tldName);
+          if (signal.aborted) return;
+          setPrefill((prev) => ({ ...prev, ownerAddress }));
+        } catch (error) {
+          if (signal.aborted) return;
+          console.warn("Failed to look up TLD owner on-chain:", error);
+        }
       }
     };
 
@@ -164,7 +185,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start bg-linear-to-br from-black to-gray-900">
-      <div className="w-full max-w-md px-2 mt-10 ml-auto">
+      <div className="w-full max-w-2xl flex justify-end px-6 mt-6">
         <CardanoWalletConnector
           ref={walletRef}
           variant="default"
@@ -175,14 +196,9 @@ export default function App() {
             setWalletApi(null);
             setPrefill((prev) => {
               if (!prev) return prev;
-              const next = { ...prev };
-              // Only clear ownerAddress if it was set from the wallet
-              // (i.e. it matches userAddress). Preserve default/config value.
-              if (next.ownerAddress === next.userAddress) {
-                delete next.ownerAddress;
-              }
-              delete next.userAddress;
-              return next;
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure to remove userAddress
+              const { userAddress: _removed, ...rest } = prev;
+              return rest;
             });
           }}
         />
@@ -190,7 +206,7 @@ export default function App() {
 
       {isLoadingDefaults
         ? <p className="text-white/60 text-xs mt-10">Loading defaults…</p>
-        : <SldMintPanel key={prefillKey} prefill={prefill ?? undefined} autoBuild walletApi={walletApi ?? undefined} />
+        : <SldMintPanel key={prefillKey} prefill={prefill ?? undefined} walletApi={walletApi ?? undefined} />
       }
     </div>
   );

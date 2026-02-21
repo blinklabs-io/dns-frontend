@@ -1,10 +1,10 @@
 /* global console */
-/* eslint-disable @typescript-eslint/no-explicit-any -- Lucid WASM bindings and Mesh SDK interop lack TS types */
+/* eslint-disable @typescript-eslint/no-explicit-any -- CML WASM bindings and Mesh SDK interop lack TS types */
 import type { Request, Response } from "express";
 import { LargestFirstInputSelector, MeshTxBuilder } from "@meshsdk/core";
-import { C } from "lucid-cardano";
+import * as CML from "@dcspark/cardano-multiplatform-lib-nodejs";
 import { Buffer } from "buffer";
-import { prepareSldMintArtifacts, createReferenceTokenTN } from "../services/sldBuilder.js";
+import { prepareSldMintArtifacts, createReferenceTokenTN, createUserTokenTN } from "../services/sldBuilder.js";
 import { buildSldMintPlan } from "../services/sldMintPlanner.js";
 import { buildSldMintTx } from "../services/sldMintBuilder.js";
 import { createProvider } from "../services/providerFactory.js";
@@ -127,53 +127,13 @@ export async function submitTransaction(req: Request, res: Response) {
 
 // --- Simplified partial transaction submission ---
 
-function decodeHexOrBase64(payload: string): Buffer {
+/** Normalize a hex string: trim whitespace, strip optional 0x prefix, validate. */
+function normalizeHex(payload: string): string {
   const trimmed = payload.trim().replace(/^0x/i, "").replace(/\s+/g, "");
-  if (!trimmed) {
-    throw new Error("Payload is empty after trimming");
-  }
-  if (/^[0-9a-fA-F]+$/.test(trimmed)) {
-    if (trimmed.length % 2 !== 0) {
-      throw new Error("Hex string has odd length — likely a truncated value");
-    }
-    return Buffer.from(trimmed, "hex");
-  }
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(trimmed)) {
-    throw new Error("Payload is neither valid hex nor valid base64");
-  }
-  // Validate base64 length: padded length must be a multiple of 4
-  if (trimmed.length % 4 !== 0) {
-    throw new Error("Invalid base64: length must be a multiple of 4");
-  }
-  return Buffer.from(trimmed, "base64");
-}
-
-function mergeVkeyWitnesses(lib: any, base: any, extra: any) {
-  if (!base) return extra;
-  if (!extra) return base;
-
-  const baseVkeys = typeof base.vkeys === "function" ? base.vkeys() : null;
-  const extraVkeys = typeof extra.vkeys === "function" ? extra.vkeys() : null;
-
-  if (extraVkeys && extraVkeys.len() > 0) {
-    const merged = lib.Vkeywitnesses.new();
-    const seen = new Set<string>();
-    const addUnique = (vkeys: { len: () => number; get: (i: number) => { vkey: () => { to_bytes: () => Uint8Array }; to_bytes: () => Uint8Array } }) => {
-      for (let i = 0; i < vkeys.len(); i++) {
-        const vkw = vkeys.get(i);
-        const key = Buffer.from(vkw.vkey().to_bytes()).toString("hex");
-        if (!seen.has(key)) {
-          seen.add(key);
-          merged.add(vkw);
-        }
-      }
-    };
-    if (baseVkeys) addUnique(baseVkeys);
-    addUnique(extraVkeys);
-    base.set_vkeys(merged);
-  }
-
-  return base;
+  if (!trimmed) throw new Error("Payload is empty after trimming");
+  if (!/^[0-9a-fA-F]+$/.test(trimmed)) throw new Error("Payload is not valid hex");
+  if (trimmed.length % 2 !== 0) throw new Error("Hex string has odd length");
+  return trimmed;
 }
 
 export async function submitPartialTransaction(req: Request, res: Response) {
@@ -192,45 +152,44 @@ export async function submitPartialTransaction(req: Request, res: Response) {
       return res.status(400).json({ error: "Payload too large" });
     }
 
-    const lib = C as any;
-    const txBytes = decodeHexOrBase64(unsignedTx);
-    const witnessBytes = decodeHexOrBase64(witnessSet);
+    const txHex = normalizeHex(unsignedTx);
+    const witnessHex = normalizeHex(witnessSet);
 
     // Parse unsigned transaction
-    let tx: any;
+    let tx: CML.Transaction;
     try {
-      tx = lib.Transaction.from_bytes(txBytes);
+      tx = CML.Transaction.from_cbor_hex(txHex);
     } catch (err: any) {
       return res.status(400).json({
         error: "Failed to parse unsigned transaction",
-        details: sanitizeForLog(err?.message),
+        details: sanitizeForLog(err?.message ?? String(err)),
       });
     }
 
     // Parse wallet's witness set (contains vkey signatures)
-    let walletWitness: any;
+    let walletWitness: CML.TransactionWitnessSet;
     try {
-      walletWitness = lib.TransactionWitnessSet.from_bytes(witnessBytes);
+      walletWitness = CML.TransactionWitnessSet.from_cbor_hex(witnessHex);
     } catch {
       // Try parsing as full transaction and extract witness set
       try {
-        const witnessTx = lib.Transaction.from_bytes(witnessBytes);
+        const witnessTx = CML.Transaction.from_cbor_hex(witnessHex);
         walletWitness = witnessTx.witness_set();
       } catch (err: any) {
         return res.status(400).json({
           error: "Failed to parse witness set",
-          details: sanitizeForLog(err?.message),
+          details: sanitizeForLog(err?.message ?? String(err)),
         });
       }
     }
 
-    // Merge witness sets: keep redeemers from original, add vkeys from wallet
-    const baseWitness = tx.witness_set();
-    const mergedWitness = mergeVkeyWitnesses(lib, baseWitness, walletWitness);
+    // Merge witness sets: add_all_witnesses merges vkeys, scripts, datums, redeemers
+    const mergedWitness = tx.witness_set();
+    mergedWitness.add_all_witnesses(walletWitness);
 
     // Rebuild transaction with merged witness set
-    const signedTx = lib.Transaction.new(tx.body(), mergedWitness, tx.auxiliary_data());
-    const signedTxHex = Buffer.from(signedTx.to_bytes()).toString("hex");
+    const signedTx = CML.Transaction.new(tx.body(), mergedWitness, tx.is_valid(), tx.auxiliary_data());
+    const signedTxHex = signedTx.to_cbor_hex();
 
     // Submit to chain
     const provider: any = createProvider();
@@ -238,9 +197,16 @@ export async function submitPartialTransaction(req: Request, res: Response) {
       const txId = await provider.postTransactionToChain(signedTxHex);
       return res.json({ txId, signedTx: signedTxHex });
     } catch (submitError: any) {
+      // Blockfrost and other providers bury the actual error in various places
+      const detail =
+        submitError?.data?.message ||
+        submitError?.response?.data?.message ||
+        submitError?.message ||
+        (typeof submitError === "string" ? submitError : JSON.stringify(submitError));
+      console.error("Transaction submission failed:", sanitizeForLog(detail));
       return res.status(500).json({
         error: "Transaction submission failed",
-        details: sanitizeForLog(submitError?.data?.message || submitError?.message),
+        details: sanitizeForLog(detail),
       });
     }
   } catch (error: any) {
@@ -270,19 +236,27 @@ export async function decodeUtxos(req: Request, res: Response) {
     }
 
     const decodedUtxos = utxos.map((hexString: string) => {
-      const utxo = C.TransactionUnspentOutput.from_bytes(Buffer.from(hexString, "hex"));
+      const utxo = CML.TransactionUnspentOutput.from_cbor_hex(hexString);
       const output = utxo.output();
       const input = utxo.input();
-      const multiasset = output.amount().multiasset();
+      const multiasset = output.amount().has_multiassets() ? output.amount().multi_asset() : undefined;
+
+      let address: string;
+      try {
+        address = output.address().to_bech32();
+      } catch {
+        // Byron-era addresses don't support bech32 encoding; fall back to hex
+        address = output.address().to_hex();
+      }
 
       return {
         txHash: input.transaction_id().to_hex(),
-        outputIndex: Number(input.index().to_str()),
+        outputIndex: Number(input.index()),
         amount: {
-          coins: output.amount().coin().to_str(),
+          coins: output.amount().coin().toString(),
           assets: multiasset ? parseMultiAssets(multiasset) : undefined,
         },
-        address: (output.address() as any).to_bech32(),
+        address,
       };
     });
 
@@ -424,7 +398,7 @@ export async function planSldMint(req: Request, res: Response) {
 
 /** Shared validation and normalization for planSldMintFull / buildSldMint. */
 function validateSldMintRequest(body: any): { error: string } | {
-  userAddress: string; ownerAddress: string; tldRefAddress: string; sldRefAddress: string;
+  userAddress: string; ownerAddress?: string; tldRefAddress: string; sldRefAddress: string;
   tldName: string; sldName: string; csTld: string; csSld: string;
   currentSldHexList?: string[]; tldReferenceRef: any; sldReferenceRef: any;
   minLovelaceTldRef?: bigint; minLovelaceOwner?: bigint; minLovelaceSldRef?: bigint; minLovelaceSldUser?: bigint;
@@ -436,9 +410,9 @@ function validateSldMintRequest(body: any): { error: string } | {
     minLovelaceTldRef, minLovelaceOwner, minLovelaceSldRef, minLovelaceSldUser,
   } = body || {};
 
-  if (!userAddress || !ownerAddress || !tldRefAddress || !sldRefAddress ||
+  if (!userAddress || !tldRefAddress || !sldRefAddress ||
       !tldName || !sldName || !csTld || !csSld || !tldReferenceRef || !sldReferenceRef) {
-    return { error: "userAddress, ownerAddress, tldRefAddress, sldRefAddress, tldName, sldName, csTld, csSld, tldReferenceRef, sldReferenceRef are required" };
+    return { error: "userAddress, tldRefAddress, sldRefAddress, tldName, sldName, csTld, csSld, tldReferenceRef, sldReferenceRef are required" };
   }
   if (typeof tldName !== "string" || typeof sldName !== "string" ||
       typeof csTld !== "string" || typeof csSld !== "string") {
@@ -456,11 +430,12 @@ function validateSldMintRequest(body: any): { error: string } | {
   }
 
   const normalizedUserAddress = toBech32Address(String(userAddress));
-  const normalizedOwnerAddress = toBech32Address(String(ownerAddress));
+  const normalizedOwnerAddress = ownerAddress ? toBech32Address(String(ownerAddress)) : undefined;
   const normalizedTldRefAddress = toBech32Address(String(tldRefAddress));
   const normalizedSldRefAddress = toBech32Address(String(sldRefAddress));
 
-  if (!isValidBech32Address(normalizedUserAddress) || !isValidBech32Address(normalizedOwnerAddress) ||
+  if (!isValidBech32Address(normalizedUserAddress) ||
+      (normalizedOwnerAddress && !isValidBech32Address(normalizedOwnerAddress)) ||
       !isValidBech32Address(normalizedTldRefAddress) || !isValidBech32Address(normalizedSldRefAddress)) {
     return { error: "addresses must be valid bech32 or hex-encoded address bytes" };
   }
@@ -504,13 +479,43 @@ function validateSldMintRequest(body: any): { error: string } | {
   };
 }
 
+/**
+ * Resolve the TLD owner address on-chain by looking up the unique NFT holder.
+ * Returns the owner address, or an error object with HTTP status and body.
+ */
+async function resolveTldOwner(
+  provider: ReturnType<typeof createProvider>,
+  csTld: string,
+  tldName: string,
+): Promise<{ address: string } | { status: number; body: Record<string, unknown> }> {
+  const userTokenHex = createUserTokenTN(tldName);
+  const asset = `${csTld}${userTokenHex}`;
+  const addresses = await provider.fetchAssetAddresses(asset);
+  if (!addresses || addresses.length === 0) {
+    return { status: 404, body: { error: "TLD user token not found on-chain — cannot determine owner address" } };
+  }
+  const singleHolders = addresses.filter((a) => a.quantity === "1");
+  if (singleHolders.length !== 1) {
+    return { status: 409, body: { error: "Expected exactly one holder of TLD user token (NFT)", holders: addresses } };
+  }
+  return { address: singleHolders[0].address };
+}
+
 export async function planSldMintFull(req: Request, res: Response) {
   try {
     const validated = validateSldMintRequest(req.body);
     if ("error" in validated) return res.status(400).json({ error: validated.error });
 
     const provider = createProvider();
-    const plan = await buildSldMintPlan({ provider: provider as any, ...validated });
+
+    let { ownerAddress } = validated;
+    if (!ownerAddress) {
+      const result = await resolveTldOwner(provider, validated.csTld, validated.tldName);
+      if ("status" in result) return res.status(result.status).json(result.body);
+      ownerAddress = result.address;
+    }
+
+    const plan = await buildSldMintPlan({ provider, ...validated, ownerAddress });
 
     return res.json({ message: "Prepared SLD mint plan", plan: serializeBigInts(plan) });
   } catch (error: any) {
@@ -525,27 +530,63 @@ export async function buildSldMint(req: Request, res: Response) {
     if ("error" in validated) return res.status(400).json({ error: validated.error });
 
     const provider = createProvider();
-    const result = await buildSldMintTx({ provider: provider as any, ...validated });
 
-    return res.json({ message: "Built unsigned SLD mint transaction", unsignedTx: result.unsignedTx, plan: serializeBigInts(result.plan) });
+    let { ownerAddress } = validated;
+    if (!ownerAddress) {
+      const result = await resolveTldOwner(provider, validated.csTld, validated.tldName);
+      if ("status" in result) return res.status(result.status).json(result.body);
+      ownerAddress = result.address;
+    }
+
+    const txResult = await buildSldMintTx({ provider, ...validated, ownerAddress });
+
+    return res.json({ message: "Built unsigned SLD mint transaction", unsignedTx: txResult.unsignedTx, plan: serializeBigInts(txResult.plan) });
   } catch (error: any) {
     console.error("Error building SLD mint tx:", sanitizeForLog(error?.message));
     return res.status(500).json({ error: "Failed to build SLD mint transaction", details: sanitizeForLog(error?.message) });
   }
 }
 
-function parseMultiAssets(multiAsset: any) {
+function parseMultiAssets(multiAsset: CML.MultiAsset) {
   const assets: Record<string, string> = {};
   const policies = multiAsset.keys();
   for (let i = 0; i < policies.len(); i++) {
     const policy = policies.get(i);
-    const policyAssets = multiAsset.get(policy);
+    const policyAssets = multiAsset.get_assets(policy);
+    if (!policyAssets) continue;
     const assetNames = policyAssets.keys();
     for (let j = 0; j < assetNames.len(); j++) {
       const assetName = assetNames.get(j);
       const amount = policyAssets.get(assetName);
-      assets[`${policy.to_hex()}.${Buffer.from(assetName.name()).toString("hex")}`] = amount.to_str();
+      if (amount === undefined) continue;
+      assets[`${policy.to_hex()}.${Buffer.from(assetName.to_raw_bytes()).toString("hex")}`] = amount.toString();
     }
   }
   return assets;
+}
+
+/**
+ * Look up the owner address of a TLD by finding who holds its user token on-chain.
+ * GET /api/transactions/tld-owner/:csTld/:tldName
+ */
+export async function lookupTldOwner(req: Request, res: Response) {
+  try {
+    const { csTld, tldName } = req.params;
+    if (!csTld || !/^[0-9a-fA-F]{56}$/.test(csTld)) {
+      return res.status(400).json({ error: "csTld must be a 56-char hex policy ID" });
+    }
+    if (!tldName || !/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(tldName) || tldName.length > 64) {
+      return res.status(400).json({ error: "tldName must be alphanumeric with hyphens, max 64 chars" });
+    }
+
+    const provider = createProvider();
+    const result = await resolveTldOwner(provider, csTld, tldName);
+    if ("status" in result) return res.status(result.status).json(result.body);
+
+    const asset = `${csTld}${createUserTokenTN(tldName)}`;
+    return res.json({ ownerAddress: result.address, asset });
+  } catch (error: any) {
+    console.error("Error looking up TLD owner:", sanitizeForLog(error?.message));
+    return res.status(500).json({ error: "Failed to look up TLD owner", details: sanitizeForLog(error?.message) });
+  }
 }

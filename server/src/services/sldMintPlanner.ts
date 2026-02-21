@@ -283,13 +283,22 @@ export async function buildSldMintPlan({
   // Select an owner lovelace UTxO (distinct from the TLD user token UTxO and
   // any UTxOs already claimed as user inputs) so the owner's ADA can be
   // explicitly returned and not swept to the user's change.
-  const claimedInputs = [tldUserTokenUtxo, collateralUtxo, userLovelace];
-  const ownerSpendable = ownerUtxos.filter(
-    (u) => !claimedInputs.some((c) => c.input.txHash === u.input.txHash && c.input.outputIndex === u.input.outputIndex)
-  );
-  const ownerLovelace = selectLargestLovelace(ownerSpendable);
-  if (!ownerLovelace) {
-    throw new Error("No spendable lovelace UTxO available at owner address besides the TLD user token UTxO.");
+  // When userAddress === ownerAddress, reuse the user payment UTxO — the
+  // change output will return the owner's ADA automatically.
+  const sameAddress = userAddress === ownerAddress;
+  let ownerLovelace: MeshUtxo;
+  if (sameAddress) {
+    ownerLovelace = userLovelace;
+  } else {
+    const claimedInputs = [tldUserTokenUtxo, collateralUtxo, userLovelace];
+    const ownerSpendable = ownerUtxos.filter(
+      (u) => !claimedInputs.some((c) => c.input.txHash === u.input.txHash && c.input.outputIndex === u.input.outputIndex)
+    );
+    const selected = selectLargestLovelace(ownerSpendable);
+    if (!selected) {
+      throw new Error("No spendable lovelace UTxO available at owner address besides the TLD user token UTxO.");
+    }
+    ownerLovelace = selected;
   }
 
   const tldRefTokenUtxo = findUtxoWithAsset(tldRefUtxos, tldReferenceAssetId);

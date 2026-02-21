@@ -115,7 +115,7 @@ export function planSldMint(payload: MintSldPlanRequest) {
 
 export interface MintSldPlanFullRequest extends MintSldPlanRequest {
   userAddress: string;
-  ownerAddress: string;
+  ownerAddress?: string;
   tldRefAddress: string;
   sldRefAddress: string;
   tldReferenceRef: { txHash: string; txIndex: number };
@@ -160,4 +160,20 @@ export interface ReferenceRefsResponse {
 
 export function fetchReferenceRefs(payload: ReferenceRefsRequest) {
   return postJSON<ReferenceRefsResponse>("/api/transactions/reference-refs", payload);
+}
+
+// ---- TLD owner lookup -------------------------------------------------------
+
+export interface TldOwnerResponse {
+  ownerAddress: string;
+  asset: string;
+}
+
+export async function lookupTldOwner(csTld: string, tldName: string): Promise<TldOwnerResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/transactions/tld-owner/${encodeURIComponent(csTld)}/${encodeURIComponent(tldName)}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Request failed ${res.status}: ${text}`);
+  }
+  return res.json() as Promise<TldOwnerResponse>;
 }
