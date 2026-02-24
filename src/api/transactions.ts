@@ -143,6 +143,23 @@ export function buildSldMint(payload: MintSldPlanFullRequest) {
   return postJSON<MintSldBuildResponse>("/api/transactions/mint-sld/build", payload);
 }
 
+// ---- SLD availability check -------------------------------------------------
+
+export interface CheckSldAvailabilityRequest {
+  csTld: string;
+  tldName: string;
+  sldName: string;
+  tldRefAddress: string;
+}
+
+export interface CheckSldAvailabilityResponse {
+  available: boolean;
+}
+
+export function checkSldAvailability(payload: CheckSldAvailabilityRequest) {
+  return postJSON<CheckSldAvailabilityResponse>("/api/transactions/mint-sld/check-availability", payload);
+}
+
 // ---- Reference refs helper --------------------------------------------------
 export interface ReferenceRefsRequest {
   tldRefAddress: string;

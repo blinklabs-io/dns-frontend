@@ -27,6 +27,7 @@ interface CardanoWalletConnectorProps {
   onDisconnect?: () => void;
   showError?: (message: string) => void;
   navigateOnConnect?: (path: string) => void;
+  autoConnectWallet?: string;
 }
 
 interface WalletState {
@@ -40,6 +41,7 @@ export interface WalletConnectorRef {
   disconnect: () => void;
   getWalletState: () => WalletState;
   isConnected: () => boolean;
+  connectWallet: (walletName: string) => void;
 }
 
 const DEFAULT_SUPPORTED_WALLETS = [
@@ -53,7 +55,7 @@ const DEFAULT_SUPPORTED_WALLETS = [
 ];
 
 const DROPDOWN_WALLET_LIST_CSS = `
-  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 0.875rem;
   font-weight: 700;
   width: 100%;
@@ -102,7 +104,7 @@ const FLEX_WALLET_LIST_CSS = `
   gap: 10px;
   width: 100%;
   max-width: 540px;
-  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 0.8rem;
   font-weight: 700;
   justify-items: stretch;
@@ -166,6 +168,7 @@ const CardanoWalletConnector = forwardRef<WalletConnectorRef, CardanoWalletConne
   onDisconnect,
   showError = (msg) => console.error(msg),
   navigateOnConnect,
+  autoConnectWallet,
 }, ref) => {
   const [walletState, setWalletState] = useState<WalletState>({
     isConnected: false,
@@ -187,7 +190,17 @@ const CardanoWalletConnector = forwardRef<WalletConnectorRef, CardanoWalletConne
     disconnect: handleDisconnect,
     getWalletState: () => walletState,
     isConnected: () => walletState.isConnected,
+    connectWallet: (walletName: string) => { void onConnectWallet(walletName); },
   }));
+
+  // Auto-connect to a specific wallet on mount when requested
+  const autoConnectTriggered = useRef(false);
+  useEffect(() => {
+    if (autoConnectWallet && !autoConnectTriggered.current && !walletState.isConnected) {
+      autoConnectTriggered.current = true;
+      void onConnectWallet(autoConnectWallet);
+    }
+  });
 
   const showErrorOnce = (message: string) => {
     const now = Date.now();
@@ -405,7 +418,7 @@ const CardanoWalletConnector = forwardRef<WalletConnectorRef, CardanoWalletConne
       <div className="flex items-center space-x-4">
         <button
           onClick={handleDisconnect}
-          className="flex py-2.5 px-6 justify-center items-center gap-2.5 self-stretch rounded-md border border-white/10 text-white/70 font-medium cursor-pointer hover:text-white hover:border-white/20 transition-all"
+          className="flex py-2.5 px-6 justify-center items-center gap-2.5 self-stretch rounded-xl border border-white/15 text-white font-ibm-plex font-bold text-sm cursor-pointer hover:bg-white/5 hover:border-white/25 transition-all"
         >
           Disconnect
         </button>
@@ -415,8 +428,8 @@ const CardanoWalletConnector = forwardRef<WalletConnectorRef, CardanoWalletConne
 
   const buttonClasses =
     variant === "white"
-      ? "flex py-3 px-8 justify-center items-center gap-2.5 rounded-md bg-white text-black font-medium cursor-pointer text-lg md:text-base hover:bg-gray-100 transition-all"
-      : "flex py-2 px-6 justify-center items-center gap-2.5 self-stretch rounded-md border border-white/10 text-white/70 text-sm font-medium z-40 cursor-pointer hover:bg-white/10 hover:border-white/20 hover:text-white transition-all";
+      ? "flex py-3 px-8 justify-center items-center gap-2.5 rounded-xl bg-white text-black font-ibm-plex font-bold cursor-pointer text-lg md:text-base hover:bg-gray-100 transition-all"
+      : "flex py-2 px-6 justify-center items-center gap-2.5 self-stretch rounded-xl border border-white/15 text-white font-ibm-plex font-bold text-sm z-40 cursor-pointer hover:bg-white/5 hover:border-white/25 transition-all";
 
   if (showTitle || showDescription) {
     return (

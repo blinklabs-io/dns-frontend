@@ -5,7 +5,7 @@ import { LargestFirstInputSelector, MeshTxBuilder } from "@meshsdk/core";
 import * as CML from "@dcspark/cardano-multiplatform-lib-nodejs";
 import { Buffer } from "buffer";
 import { prepareSldMintArtifacts, createReferenceTokenTN, createUserTokenTN } from "../services/sldBuilder.js";
-import { buildSldMintPlan } from "../services/sldMintPlanner.js";
+import { buildSldMintPlan, checkSldAvailability as checkSldAvailabilityService } from "../services/sldMintPlanner.js";
 import { buildSldMintTx } from "../services/sldMintBuilder.js";
 import { createProvider } from "../services/providerFactory.js";
 import {
@@ -499,6 +499,48 @@ async function resolveTldOwner(
     return { status: 409, body: { error: "Expected exactly one holder of TLD user token (NFT)", holders: addresses } };
   }
   return { address: singleHolders[0].address };
+}
+
+export async function checkSldAvailability(req: Request, res: Response) {
+  try {
+    const { csTld, tldName, sldName, tldRefAddress } = req.body || {};
+
+    if (!csTld || !tldName || !sldName || !tldRefAddress) {
+      return res.status(400).json({ error: "csTld, tldName, sldName, tldRefAddress are required" });
+    }
+    if (typeof tldName !== "string" || typeof sldName !== "string" || typeof csTld !== "string") {
+      return res.status(400).json({ error: "tldName, sldName, csTld must be strings" });
+    }
+    if (tldName.length > 64 || sldName.length > 64) {
+      return res.status(400).json({ error: "tldName and sldName must not exceed 64 characters" });
+    }
+    if (!/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(tldName) ||
+        !/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(sldName)) {
+      return res.status(400).json({ error: "tldName and sldName must be alphanumeric with optional hyphens" });
+    }
+    if (!/^[0-9a-fA-F]{56}$/.test(csTld)) {
+      return res.status(400).json({ error: "csTld must be a valid 56-character hex policy ID" });
+    }
+
+    const normalizedTldRefAddress = toBech32Address(String(tldRefAddress));
+    if (!isValidBech32Address(normalizedTldRefAddress)) {
+      return res.status(400).json({ error: "tldRefAddress must be a valid bech32 or hex-encoded address" });
+    }
+
+    const provider = createProvider();
+    const result = await checkSldAvailabilityService({
+      provider,
+      csTld,
+      tldName,
+      sldName,
+      tldRefAddress: normalizedTldRefAddress,
+    });
+
+    return res.json(result);
+  } catch (error: any) {
+    console.error("Error checking SLD availability:", sanitizeForLog(error?.message));
+    return res.status(500).json({ error: "Failed to check SLD availability", details: sanitizeForLog(error?.message) });
+  }
 }
 
 export async function planSldMintFull(req: Request, res: Response) {

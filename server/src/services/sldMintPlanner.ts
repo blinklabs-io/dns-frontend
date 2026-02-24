@@ -163,6 +163,45 @@ function extractSldListFromDatum(inlineDatum: unknown): string[] | null {
 }
 
 /**
+ * Lightweight check: is the given SLD name already registered under this TLD?
+ * Reads the TLD reference UTxO datum to get the list of existing SLDs.
+ */
+export async function checkSldAvailability({
+  provider,
+  csTld,
+  tldName,
+  sldName,
+  tldRefAddress,
+}: {
+  provider: IFetcher;
+  csTld: string;
+  tldName: string;
+  sldName: string;
+  tldRefAddress: string;
+}): Promise<{ available: boolean }> {
+  if (!isValidPolicyId(csTld)) {
+    throw new Error(`Invalid TLD policy ID: expected 56 hex characters`);
+  }
+
+  const rawTldRefUtxos = await provider.fetchAddressUTxOs(tldRefAddress);
+  const tldRefUtxos = rawTldRefUtxos.map(toMeshUtxo);
+
+  const tldReferenceAssetId = assetId(csTld, createReferenceTokenTN(tldName));
+  const tldRefTokenUtxo = findUtxoWithAsset(tldRefUtxos, tldReferenceAssetId);
+  if (!tldRefTokenUtxo) {
+    throw new Error(`TLD reference token not found at TLD reference address`);
+  }
+
+  const sldList = extractSldListFromDatum(tldRefTokenUtxo.output.inlineDatum);
+  if (!sldList) {
+    throw new Error("Unable to extract SLD list from TLD reference datum");
+  }
+
+  const sldHex = Buffer.from(sldName, "utf8").toString("hex");
+  return { available: !sldList.includes(sldHex) };
+}
+
+/**
  * Builds a transaction plan for minting a second-level domain (SLD).
  *
  * @param provider - IFetcher provider for querying blockchain data

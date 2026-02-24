@@ -90,6 +90,18 @@ export default function App() {
     }
   };
 
+  const handleDisconnect = () => {
+    setWalletApi(null);
+    setShowWalletPicker(false);
+    setPrefill((prev) => {
+      if (!prev) return prev;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure to remove userAddress
+      const { userAddress: _removed, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  // Load static/env/remote defaults on mount (no chain queries)
   useEffect(() => {
     const parseNumber = (value: string | undefined, fallback: number | undefined) => {
       const next = Number(value);
@@ -98,7 +110,6 @@ export default function App() {
 
     const fetchDefaults = async (signal: AbortSignal) => {
       const staticDefaults: Partial<MintSldPlanFullRequest> = {
-        // Preprod defaults - switch to environment variables later
         tldName: "hello-handshake",
         sldName: "",
         csTld: "694cb48da919e928b3e51c4648f051326ac150eaa9436792ec7a6e35",
@@ -133,10 +144,6 @@ export default function App() {
 
       const remoteUrl = import.meta.env.VITE_SLD_DEFAULTS_URL as string | undefined;
 
-      // Track the resolved values so the owner lookup uses the final csTld/tldName
-      let resolvedDefaults = { ...staticDefaults, ...envDefaults };
-
-      // Apply static/env/remote defaults (ownerAddress always comes from on-chain lookup)
       if (!remoteUrl) {
         setPrefill((prev) => ({ ...staticDefaults, ...envDefaults, ...prev }));
       } else {
@@ -147,7 +154,6 @@ export default function App() {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars -- strip ownerAddress; it only comes from on-chain lookup
           const { ownerAddress: _stripped, ...json } = (await res.json()) as Partial<MintSldPlanFullRequest>;
           if (signal.aborted) return;
-          resolvedDefaults = { ...resolvedDefaults, ...json };
           setPrefill((prev) => ({
             ...staticDefaults,
             ...envDefaults,
@@ -162,20 +168,6 @@ export default function App() {
           if (!signal.aborted) setIsLoadingDefaults(false);
         }
       }
-
-      // Look up TLD owner address on-chain (the only source for ownerAddress)
-      const csTld = resolvedDefaults.csTld as string | undefined;
-      const tldName = resolvedDefaults.tldName as string | undefined;
-      if (csTld && tldName) {
-        try {
-          const { ownerAddress } = await lookupTldOwner(csTld, tldName);
-          if (signal.aborted) return;
-          setPrefill((prev) => ({ ...prev, ownerAddress }));
-        } catch (error) {
-          if (signal.aborted) return;
-          console.warn("Failed to look up TLD owner on-chain:", error);
-        }
-      }
     };
 
     const controller = new AbortController();
@@ -183,31 +175,121 @@ export default function App() {
     return () => controller.abort();
   }, []);
 
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] relative">
-      <div className="absolute top-6 right-6">
-        <CardanoWalletConnector
-          ref={walletRef}
-          variant="default"
-          listLayout="dropdown"
-          networkType={NetworkType.TESTNET}
-          onConnect={handleConnect}
-          onDisconnect={() => {
-            setWalletApi(null);
-            setPrefill((prev) => {
-              if (!prev) return prev;
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure to remove userAddress
-              const { userAddress: _removed, ...rest } = prev;
-              return rest;
-            });
-          }}
-        />
-      </div>
+  // Look up TLD owner on-chain when wallet connects (deferred from mount so the
+  // server has time to be ready and we only hit the chain when actually needed)
+  useEffect(() => {
+    if (!walletApi) return;
+    const csTld = prefill?.csTld;
+    const tldName = prefill?.tldName;
+    if (!csTld || !tldName) return;
+    // Skip if we already have an owner address
+    if (prefill?.ownerAddress) return;
 
-      {isLoadingDefaults
-        ? <p className="text-white/60 text-xs">Loading defaults…</p>
-        : <SldMintPanel key={prefillKey} prefill={prefill ?? undefined} walletApi={walletApi ?? undefined} />
-      }
+    const controller = new AbortController();
+    lookupTldOwner(csTld, tldName)
+      .then(({ ownerAddress }) => {
+        if (controller.signal.aborted) return;
+        setPrefill((prev) => ({ ...prev, ownerAddress }));
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        console.warn("Failed to look up TLD owner on-chain:", error);
+      });
+    return () => controller.abort();
+  }, [walletApi, prefill?.csTld, prefill?.tldName, prefill?.ownerAddress]);
+
+  const isConnected = !!walletApi;
+  const [showWalletPicker, setShowWalletPicker] = useState(false);
+
+  const knownWallets = ["eternl", "yoroi", "gerowallet", "begin", "nufi", "lace", "vespr"];
+  const detectedWallets = knownWallets.filter((w) => window.cardano?.[w]);
+
+  return (
+    <div
+      className="min-h-screen flex flex-col items-center justify-center relative px-4"
+      style={{
+        backgroundColor: "#040617",
+        backgroundImage: "linear-gradient(180deg, rgba(28, 36, 110, 0.45) 0%, rgba(4, 6, 23, 0.65) 35%)",
+      }}
+    >
+      {!isConnected && !showWalletPicker ? (
+        /* ---- Landing page ---- */
+        <div className="w-full max-w-md rounded-2xl bg-white/[0.04] border border-white/10 backdrop-blur-sm px-8 py-10 space-y-6 text-center">
+          <h1 className="text-white text-2xl font-bold tracking-tight">Decentralized Domains</h1>
+          <p className="text-white/50 text-sm font-ibm-plex">
+            Register decentralized domains powered by Cardano and Handshake blockchains.
+          </p>
+          <button
+            onClick={() => setShowWalletPicker(true)}
+            className="w-full h-12 rounded-xl bg-white text-black text-sm font-bold font-ibm-plex hover:bg-gray-100 transition-colors cursor-pointer"
+          >
+            Connect Wallet
+          </button>
+          {detectedWallets.length > 0 && (
+            <p className="text-white/30 text-xs font-ibm-plex">
+              Detected: {detectedWallets.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(", ")}
+            </p>
+          )}
+        </div>
+      ) : !isConnected && detectedWallets.length === 1 ? (
+        /* ---- Single wallet — auto-connect ---- */
+        <div className="w-full max-w-md rounded-2xl bg-white/[0.04] border border-white/10 backdrop-blur-sm px-8 py-10 space-y-6 text-center">
+          <h1 className="text-white text-2xl font-bold tracking-tight">Decentralized Domains</h1>
+          <p className="text-white/50 text-sm font-ibm-plex animate-pulse">
+            Connecting to {detectedWallets[0].charAt(0).toUpperCase() + detectedWallets[0].slice(1)}...
+          </p>
+          {/* Hidden connector handles the actual connection */}
+          <div className="hidden">
+            <CardanoWalletConnector
+              ref={walletRef}
+              variant="white"
+              listLayout="flex"
+              networkType={NetworkType.TESTNET}
+              onConnect={handleConnect}
+              onDisconnect={handleDisconnect}
+              autoConnectWallet={detectedWallets[0]}
+            />
+          </div>
+        </div>
+      ) : !isConnected ? (
+        /* ---- Wallet picker ---- */
+        <div className="w-full max-w-md rounded-2xl bg-white/[0.04] border border-white/10 backdrop-blur-sm px-8 py-10 space-y-6">
+          <div className="text-center space-y-2">
+            <h1 className="text-white text-2xl font-bold tracking-tight">Decentralized Domains</h1>
+            <p className="text-white/50 text-sm font-ibm-plex">
+              {detectedWallets.length > 0
+                ? `${detectedWallets.length} wallets detected. Select one to continue.`
+                : "No wallets detected. Install a Cardano wallet extension to continue."}
+            </p>
+          </div>
+          <CardanoWalletConnector
+            ref={walletRef}
+            variant="white"
+            listLayout="flex"
+            initiallyOpen
+            networkType={NetworkType.TESTNET}
+            onConnect={handleConnect}
+            onDisconnect={handleDisconnect}
+          />
+        </div>
+      ) : (
+        /* ---- Register domain view ---- */
+        <div className="w-full max-w-xl space-y-3">
+          <div className="flex justify-end">
+            <button
+              onClick={handleDisconnect}
+              className="flex py-2 px-6 justify-center items-center gap-2.5 rounded-xl border border-white/15 text-white font-ibm-plex font-bold text-sm cursor-pointer hover:bg-white/5 hover:border-white/25 transition-all"
+            >
+              Disconnect
+            </button>
+          </div>
+
+          {isLoadingDefaults
+            ? <p className="text-white/60 text-xs text-center">Loading defaults…</p>
+            : <SldMintPanel key={prefillKey} prefill={prefill ?? undefined} walletApi={walletApi ?? undefined} />
+          }
+        </div>
+      )}
     </div>
   );
 }

@@ -5,8 +5,10 @@ import {
   fetchReferenceRefs,
   fetchAddressUtxos,
   submitPartialTransaction,
+  checkSldAvailability,
 } from "../api/transactions";
 import type { MintSldPlanFullRequest, AddressUtxosResponse } from "../api/transactions";
+
 
 type Status = { kind: "idle" } | { kind: "loading"; message: string } | { kind: "error"; message: string } | { kind: "success"; message: string };
 
@@ -16,7 +18,7 @@ type Props = {
 };
 
 const fieldClass =
-  "w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-white/30";
+  "w-full rounded-xl border border-white/15 bg-white/[0.08] px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-[#9400FF]/40";
 
 const isValidDomainName = (name: string) => /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(name);
 
@@ -81,6 +83,38 @@ export default function SldMintPanel({ prefill, walletApi }: Props) {
   const [ownerEdited, setOwnerEdited] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const [availability, setAvailability] = useState<{ kind: "idle" } | { kind: "checking" } | { kind: "available" } | { kind: "taken" } | { kind: "error"; message: string }>({ kind: "idle" });
+  const availabilityTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const availabilityAbortRef = useRef<AbortController | null>(null);
+
+  const scheduleAvailabilityCheck = useCallback((sldName: string, csTld: string, tldName: string, tldRefAddress: string) => {
+    // Cancel pending
+    if (availabilityTimerRef.current) clearTimeout(availabilityTimerRef.current);
+    availabilityAbortRef.current?.abort();
+
+    const trimmed = sldName.trim();
+    if (!trimmed || !isValidDomainName(trimmed) || !csTld || !tldName || !tldRefAddress) {
+      setAvailability({ kind: "idle" });
+      return;
+    }
+
+    setAvailability({ kind: "checking" });
+
+    availabilityTimerRef.current = setTimeout(() => {
+      const controller = new AbortController();
+      availabilityAbortRef.current = controller;
+
+      checkSldAvailability({ csTld, tldName, sldName: trimmed, tldRefAddress })
+        .then((res) => {
+          if (controller.signal.aborted) return;
+          setAvailability(res.available ? { kind: "available" } : { kind: "taken" });
+        })
+        .catch((err) => {
+          if (controller.signal.aborted) return;
+          setAvailability({ kind: "error", message: err instanceof Error ? err.message : "Check failed" });
+        });
+    }, 500);
+  }, []);
 
   const copyWithFeedback = (text: string, key: string) => {
     copyToClipboard(text);
@@ -300,27 +334,33 @@ export default function SldMintPanel({ prefill, walletApi }: Props) {
   }, [buildPayload, walletApi, signTransaction]);
 
   const isLoading = status.kind === "loading";
+  const trimmedSld = form.sldName.trim();
+  const fullDomain = trimmedSld ? `${trimmedSld}.${form.tldName}` : "";
+  const canPurchase = !isLoading && !!walletApi?.signTx && availability.kind === "available" && !!trimmedSld;
 
   return (
-    <div className="w-full max-w-xl mx-auto space-y-6 px-8 py-10">
+    <div className="w-full max-w-xl mx-auto rounded-2xl bg-white/[0.04] border border-white/10 backdrop-blur-sm px-8 py-10 space-y-6">
       {/* ---- Main purchase UI ---- */}
-      <h2 className="text-white text-2xl font-semibold tracking-tight">Register a domain</h2>
+      <h2 className="text-white text-2xl font-bold tracking-tight">Register a domain</h2>
 
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <label htmlFor="sld-name" className="block text-sm text-white/50 mb-2">Domain name</label>
+          <label htmlFor="sld-name" className="block text-sm font-ibm-plex text-white/50 mb-2">Domain name</label>
           <input
             id="sld-name"
             aria-label="Domain name"
             className={`${fieldClass} h-12 text-lg`}
             placeholder="yourname"
             value={form.sldName || ""}
-            onChange={(e) => update("sldName", e.target.value)}
+            onChange={(e) => {
+              update("sldName", e.target.value);
+              scheduleAvailabilityCheck(e.target.value, form.csTld, form.tldName, form.tldRefAddress);
+            }}
           />
         </div>
         <span className="h-12 flex items-center text-white/50 text-lg select-none">.</span>
         <div className="w-48">
-          <label htmlFor="tld-select" className="block text-sm text-white/50 mb-2">Top-level domain</label>
+          <label htmlFor="tld-select" className="block text-sm font-ibm-plex text-white/50 mb-2">Top-level domain</label>
           <select
             id="tld-select"
             aria-label="TLD"
@@ -337,21 +377,39 @@ export default function SldMintPanel({ prefill, walletApi }: Props) {
 
       <button
         onClick={() => void buyDomain()}
-        disabled={isLoading || !walletApi?.signTx}
-        className={`w-full h-12 rounded-md bg-white text-black text-sm font-semibold ${isLoading || !walletApi?.signTx ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-100"}`}
+        disabled={!canPurchase}
+        className={`w-full h-12 rounded-xl text-sm font-bold font-ibm-plex transition-colors ${
+          availability.kind === "taken"
+            ? "bg-red-500/20 text-red-400 border border-red-500/30 cursor-not-allowed"
+            : availability.kind === "error"
+              ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 cursor-not-allowed"
+              : !canPurchase
+                ? "bg-white text-black opacity-60 cursor-not-allowed"
+                : "bg-white text-black hover:bg-gray-100 cursor-pointer"
+        }`}
       >
-        {isLoading ? "Processing..." : "Purchase domain"}
+        {isLoading
+          ? "Processing..."
+          : availability.kind === "checking"
+            ? "Checking availability..."
+            : availability.kind === "taken"
+              ? `${fullDomain || "Domain"} is not available`
+              : availability.kind === "error"
+                ? "Could not verify availability"
+                : fullDomain
+                  ? `Purchase ${fullDomain}`
+                  : "Purchase domain"}
       </button>
 
       {/* ---- Status area ---- */}
       {status.kind === "loading" && (
-        <p className="text-white/80 text-sm animate-pulse">{status.message}</p>
+        <p className="text-white/80 text-sm font-ibm-plex animate-pulse">{status.message}</p>
       )}
       {status.kind === "error" && (
-        <p className="text-red-400/90 text-sm">Error: {status.message}</p>
+        <p className="text-red-400 text-sm font-ibm-plex">Error: {status.message}</p>
       )}
       {status.kind === "success" && (
-        <p className="text-emerald-400/90 text-sm">{status.message}</p>
+        <p className="text-emerald-400 text-sm font-ibm-plex">{status.message}</p>
       )}
       {submittedTxId && (
         <div className="flex items-center gap-2 text-xs">
@@ -369,7 +427,7 @@ export default function SldMintPanel({ prefill, walletApi }: Props) {
       <div className="flex justify-end">
         <button
           onClick={() => setShowAdvanced((v) => !v)}
-          className="text-xs text-white/30 hover:text-white/60"
+          className="text-xs font-ibm-plex text-white/30 hover:text-white/60 transition-colors"
         >
           {showAdvanced ? "Hide advanced" : "Advanced options"}
         </button>
@@ -382,13 +440,13 @@ export default function SldMintPanel({ prefill, walletApi }: Props) {
           <div className="flex items-center justify-between gap-3">
             <span className="text-sm font-semibold text-white">Advanced</span>
             <div className="flex gap-2">
-              <button onClick={() => void submit("plan")} className="rounded-md border border-white/30 px-3 py-2 text-white text-sm hover:bg-white/10">
+              <button onClick={() => void submit("plan")} className="rounded-xl border border-white/20 px-3 py-2 text-white text-sm font-ibm-plex hover:bg-white/5 transition-colors">
                 Plan
               </button>
-              <button onClick={() => void fetchRefs()} className="rounded-md border border-white/30 px-3 py-2 text-white text-sm hover:bg-white/10">
+              <button onClick={() => void fetchRefs()} className="rounded-xl border border-white/20 px-3 py-2 text-white text-sm font-ibm-plex hover:bg-white/5 transition-colors">
                 Auto-fetch refs
               </button>
-              <button onClick={() => void fetchUtxos()} className="rounded-md border border-white/30 px-3 py-2 text-white text-sm hover:bg-white/10">
+              <button onClick={() => void fetchUtxos()} className="rounded-xl border border-white/20 px-3 py-2 text-white text-sm font-ibm-plex hover:bg-white/5 transition-colors">
                 Check wallet UTxOs
               </button>
             </div>
