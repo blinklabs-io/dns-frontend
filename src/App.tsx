@@ -184,8 +184,8 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start bg-linear-to-br from-black to-gray-900">
-      <div className="w-full max-w-2xl flex justify-end px-6 mt-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] relative">
+      <div className="absolute top-6 right-6">
         <CardanoWalletConnector
           ref={walletRef}
           variant="default"
@@ -205,7 +205,7 @@ export default function App() {
       </div>
 
       {isLoadingDefaults
-        ? <p className="text-white/60 text-xs mt-10">Loading defaults…</p>
+        ? <p className="text-white/60 text-xs">Loading defaults…</p>
         : <SldMintPanel key={prefillKey} prefill={prefill ?? undefined} walletApi={walletApi ?? undefined} />
       }
     </div>

@@ -16,7 +16,7 @@ type Props = {
 };
 
 const fieldClass =
-  "w-full rounded-md border border-white/20 bg-black/30 px-3 py-2 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/30";
+  "w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-white/30";
 
 const isValidDomainName = (name: string) => /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(name);
 
@@ -302,30 +302,30 @@ export default function SldMintPanel({ prefill, walletApi }: Props) {
   const isLoading = status.kind === "loading";
 
   return (
-    <div className="w-full max-w-2xl mx-auto mt-10 space-y-4 p-6 rounded-2xl border border-white/15 bg-white/5">
+    <div className="w-full max-w-xl mx-auto space-y-6 px-8 py-10">
       {/* ---- Main purchase UI ---- */}
-      <h2 className="text-white text-xl font-semibold">Buy a domain</h2>
+      <h2 className="text-white text-2xl font-semibold tracking-tight">Register a domain</h2>
 
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <label htmlFor="sld-name" className="block text-sm text-white/70 mb-1">Domain name</label>
+          <label htmlFor="sld-name" className="block text-sm text-white/50 mb-2">Domain name</label>
           <input
             id="sld-name"
             aria-label="Domain name"
-            className={`${fieldClass} h-10`}
-            placeholder=""
+            className={`${fieldClass} h-12 text-lg`}
+            placeholder="yourname"
             value={form.sldName || ""}
             onChange={(e) => update("sldName", e.target.value)}
           />
         </div>
-        <span className="h-10 flex items-center text-white/50 text-lg select-none">.</span>
+        <span className="h-12 flex items-center text-white/50 text-lg select-none">.</span>
         <div className="w-48">
-          <label htmlFor="tld-select" className="block text-sm text-white/70 mb-1">Top-level domain</label>
+          <label htmlFor="tld-select" className="block text-sm text-white/50 mb-2">Top-level domain</label>
           <select
             id="tld-select"
             aria-label="TLD"
             value={form.tldName}
-            className={`${fieldClass} h-10`}
+            className={`${fieldClass} h-12`}
             disabled
           >
             <option value="hello-handshake">hello-handshake</option>
@@ -333,26 +333,25 @@ export default function SldMintPanel({ prefill, walletApi }: Props) {
             <option value="cardano" disabled>cardano (coming soon)</option>
           </select>
         </div>
-        <div className="self-end">
-          <button
-            onClick={() => void buyDomain()}
-            disabled={isLoading || !walletApi?.signTx}
-            className={`h-10 rounded-md bg-white text-black px-5 text-sm font-semibold ${isLoading || !walletApi?.signTx ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-100"}`}
-          >
-            {isLoading ? "Processing..." : "Purchase"}
-          </button>
-        </div>
       </div>
+
+      <button
+        onClick={() => void buyDomain()}
+        disabled={isLoading || !walletApi?.signTx}
+        className={`w-full h-12 rounded-md bg-white text-black text-sm font-semibold ${isLoading || !walletApi?.signTx ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-100"}`}
+      >
+        {isLoading ? "Processing..." : "Purchase domain"}
+      </button>
 
       {/* ---- Status area ---- */}
       {status.kind === "loading" && (
         <p className="text-white/80 text-sm animate-pulse">{status.message}</p>
       )}
       {status.kind === "error" && (
-        <p className="text-red-300 text-sm">Error: {status.message}</p>
+        <p className="text-red-400/90 text-sm">Error: {status.message}</p>
       )}
       {status.kind === "success" && (
-        <p className="text-green-300 text-sm">{status.message}</p>
+        <p className="text-emerald-400/90 text-sm">{status.message}</p>
       )}
       {submittedTxId && (
         <div className="flex items-center gap-2 text-xs">
@@ -370,9 +369,9 @@ export default function SldMintPanel({ prefill, walletApi }: Props) {
       <div className="flex justify-end">
         <button
           onClick={() => setShowAdvanced((v) => !v)}
-          className="text-xs text-white/50 hover:text-white/80"
+          className="text-xs text-white/30 hover:text-white/60"
         >
-          {showAdvanced ? "Hide advanced" : "Advanced"}
+          {showAdvanced ? "Hide advanced" : "Advanced options"}
         </button>
       </div>
 
@@ -397,9 +396,9 @@ export default function SldMintPanel({ prefill, walletApi }: Props) {
 
           {/* Ref / UTxO status messages */}
           {refStatus.kind === "loading" && <span className="text-xs text-white/70">Fetching refs...</span>}
-          {refStatus.kind === "error" && <span className="text-xs text-red-300">{refStatus.message}</span>}
+          {refStatus.kind === "error" && <span className="text-xs text-red-400/90">{refStatus.message}</span>}
           {utxoStatus.kind === "loading" && <span className="text-xs text-white/70">Loading UTxOs...</span>}
-          {utxoStatus.kind === "error" && <span className="text-xs text-red-300">{utxoStatus.message}</span>}
+          {utxoStatus.kind === "error" && <span className="text-xs text-red-400/90">{utxoStatus.message}</span>}
 
           {/* Read-only form fields grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -517,8 +516,8 @@ export default function SldMintPanel({ prefill, walletApi }: Props) {
                   </button>
                 )}
                 {submitStatus.kind === "loading" && <span className="text-xs text-white/70">{submitStatus.message}</span>}
-                {submitStatus.kind === "error" && <span className="text-xs text-red-300">{submitStatus.message}</span>}
-                {submitStatus.kind === "success" && <span className="text-xs text-green-300">{submitStatus.message}</span>}
+                {submitStatus.kind === "error" && <span className="text-xs text-red-400/90">{submitStatus.message}</span>}
+                {submitStatus.kind === "success" && <span className="text-xs text-emerald-400/90">{submitStatus.message}</span>}
               </div>
 
               {/* Witness set display */}
