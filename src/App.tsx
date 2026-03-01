@@ -58,6 +58,18 @@ type WalletApi = {
   signTx: (tx: string, partialSign?: boolean) => Promise<string>;
 };
 
+const NETWORK = (import.meta.env.VITE_NETWORK ?? "preprod") as string;
+const NETWORK_LABEL = (import.meta.env.VITE_NETWORK_LABEL ?? "Pre-Production Testnet") as string;
+const IS_TESTNET = NETWORK !== "mainnet";
+
+function NetworkBadge() {
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium font-ibm-plex border ${IS_TESTNET ? "bg-amber-500/15 text-amber-400 border-amber-500/20" : "bg-emerald-500/15 text-emerald-400 border-emerald-500/20"}`}>
+      {NETWORK_LABEL}
+    </span>
+  );
+}
+
 export default function App() {
   const walletRef = useRef<WalletConnectorRef>(null);
   const [prefill, setPrefill] = useState<Partial<MintSldPlanFullRequest> | null>(null);
@@ -219,6 +231,7 @@ export default function App() {
           <p className="text-white/50 text-sm font-ibm-plex">
             Register decentralized domains powered by Cardano and Handshake blockchains.
           </p>
+          <p><NetworkBadge /></p>
           <button
             onClick={() => setShowWalletPicker(true)}
             className="w-full h-12 rounded-xl bg-white text-black text-sm font-bold font-ibm-plex hover:bg-gray-100 transition-colors cursor-pointer"
@@ -261,6 +274,7 @@ export default function App() {
                 ? `${detectedWallets.length} wallets detected. Select one to continue.`
                 : "No wallets detected. Install a Cardano wallet extension to continue."}
             </p>
+            <p className="pt-1"><NetworkBadge /></p>
           </div>
           <CardanoWalletConnector
             ref={walletRef}
