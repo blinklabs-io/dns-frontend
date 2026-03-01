@@ -21,7 +21,9 @@ app.get("/health", (_req, res) => {
 
 app.use("/api/transactions", transactionRoutes);
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Express server running on port ${PORT}`);
+const parsedPort = parseInt(process.env.PORT || "", 10);
+const PORT = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 3000;
+const HOST = process.env.BIND_HOST || "0.0.0.0";
+app.listen(PORT, HOST, () => {
+  console.log(`Express server running on ${HOST}:${PORT}`);
 });

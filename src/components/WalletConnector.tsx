@@ -27,6 +27,7 @@ interface CardanoWalletConnectorProps {
   onDisconnect?: () => void;
   showError?: (message: string) => void;
   navigateOnConnect?: (path: string) => void;
+  autoConnectWallet?: string;
 }
 
 interface WalletState {
@@ -40,6 +41,7 @@ export interface WalletConnectorRef {
   disconnect: () => void;
   getWalletState: () => WalletState;
   isConnected: () => boolean;
+  connectWallet: (walletName: string) => void;
 }
 
 const DEFAULT_SUPPORTED_WALLETS = [
@@ -53,14 +55,14 @@ const DEFAULT_SUPPORTED_WALLETS = [
 ];
 
 const DROPDOWN_WALLET_LIST_CSS = `
-  font-family: Helvetica Light, sans-serif;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 0.875rem;
   font-weight: 700;
   width: 100%;
   & > span {
     padding: 10px 12px;
     color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 6px;
     margin-bottom: 10px;
     display: flex;
@@ -68,7 +70,6 @@ const DROPDOWN_WALLET_LIST_CSS = `
     justify-content: start;
     gap: 8px;
     background: transparent;
-    backdrop-filter: blur(10px);
     transition: all 0.2s ease;
     cursor: pointer;
     opacity: 0;
@@ -83,8 +84,7 @@ const DROPDOWN_WALLET_LIST_CSS = `
   & > span:nth-child(6) { animation-delay: 0.27s; }
   & > span:hover {
     background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.3);
-    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.2);
   }
   @keyframes cascadeIn {
     from {
@@ -104,7 +104,7 @@ const FLEX_WALLET_LIST_CSS = `
   gap: 10px;
   width: 100%;
   max-width: 540px;
-  font-family: Helvetica Light, sans-serif;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 0.8rem;
   font-weight: 700;
   justify-items: stretch;
@@ -113,14 +113,13 @@ const FLEX_WALLET_LIST_CSS = `
     width: 100%;
     padding: 8px 12px;
     color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: start;
     gap: 10px;
     background: transparent;
-    backdrop-filter: blur(10px);
     transition: all 0.2s ease;
     cursor: pointer;
     margin: 0;
@@ -169,6 +168,7 @@ const CardanoWalletConnector = forwardRef<WalletConnectorRef, CardanoWalletConne
   onDisconnect,
   showError = (msg) => console.error(msg),
   navigateOnConnect,
+  autoConnectWallet,
 }, ref) => {
   const [walletState, setWalletState] = useState<WalletState>({
     isConnected: false,
@@ -190,7 +190,17 @@ const CardanoWalletConnector = forwardRef<WalletConnectorRef, CardanoWalletConne
     disconnect: handleDisconnect,
     getWalletState: () => walletState,
     isConnected: () => walletState.isConnected,
+    connectWallet: (walletName: string) => { void onConnectWallet(walletName); },
   }));
+
+  // Auto-connect to a specific wallet on mount when requested
+  const autoConnectTriggered = useRef(false);
+  useEffect(() => {
+    if (autoConnectWallet && !autoConnectTriggered.current && !walletState.isConnected) {
+      autoConnectTriggered.current = true;
+      void onConnectWallet(autoConnectWallet);
+    }
+  });
 
   const showErrorOnce = (message: string) => {
     const now = Date.now();
@@ -408,7 +418,7 @@ const CardanoWalletConnector = forwardRef<WalletConnectorRef, CardanoWalletConne
       <div className="flex items-center space-x-4">
         <button
           onClick={handleDisconnect}
-          className="flex py-2.5 px-6 justify-center items-center gap-2.5 self-stretch rounded-md border border-white/20 backdrop-blur-sm text-white font-medium cursor-pointer"
+          className="flex py-2.5 px-6 justify-center items-center gap-2.5 self-stretch rounded-xl border border-white/15 text-white font-ibm-plex font-bold text-sm cursor-pointer hover:bg-white/5 hover:border-white/25 transition-all"
         >
           Disconnect
         </button>
@@ -418,8 +428,8 @@ const CardanoWalletConnector = forwardRef<WalletConnectorRef, CardanoWalletConne
 
   const buttonClasses =
     variant === "white"
-      ? "flex py-3 px-8 justify-center items-center gap-2.5 rounded-md bg-white text-black font-medium cursor-pointer text-lg md:text-base hover:bg-gray-100 transition-all"
-      : "flex py-2.5 px-10 justify-center items-center gap-2.5 self-stretch rounded-md border border-white/20 backdrop-blur-sm text-white font-medium z-40 cursor-pointer hover:bg-white/10 hover:border-white/30 transition-all";
+      ? "flex py-3 px-8 justify-center items-center gap-2.5 rounded-xl bg-white text-black font-ibm-plex font-bold cursor-pointer text-lg md:text-base hover:bg-gray-100 transition-all"
+      : "flex py-2 px-6 justify-center items-center gap-2.5 self-stretch rounded-xl border border-white/15 text-white font-ibm-plex font-bold text-sm z-40 cursor-pointer hover:bg-white/5 hover:border-white/25 transition-all";
 
   if (showTitle || showDescription) {
     return (

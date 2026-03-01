@@ -1,16 +1,18 @@
 import { LargestFirstInputSelector, MeshTxBuilder, resolvePaymentKeyHash } from "@meshsdk/core";
-import type { IFetcher } from "@meshsdk/common";
 import { buildSldMintPlan, type Amount } from "./sldMintPlanner.js";
 import type { SldMintPlan } from "./sldMintPlanner.js";
 import type { PlutusJsonConstr } from "./sldBuilder.js";
 import { normalizeAssetId } from "../utils/cardano.js";
+import type { MeshProviderAdapter } from "./providerFactory.js";
+
+const TX_TTL_SECONDS = 3600; // 60 minutes (1 slot = 1 second on Cardano)
 
 function outputAssets(spec: { lovelace: bigint; assets: Amount[] }): Amount[] {
   return [{ unit: "lovelace", quantity: spec.lovelace.toString() }, ...spec.assets];
 }
 
 export async function buildSldMintTx(params: {
-  provider: IFetcher;
+  provider: MeshProviderAdapter;
   userAddress: string;
   ownerAddress: string;
   tldRefAddress: string;
@@ -119,7 +121,9 @@ export async function buildSldMintTx(params: {
       .mintRedeemerValue(plan.mint.redeemer as PlutusJsonConstr, "JSON");
   }
 
-  // Balancing: exclude already-claimed UTxOs from coin selection to prevent duplicates
+  // Balancing: provide unclaimed UTxOs for coin selection if the builder needs
+  // additional inputs to cover fees or min-UTxO.  Already-added inputs are
+  // excluded so the builder does not add them a second time.
   const claimedRefs = new Set([
     `${userLovelace.input.txHash}#${userLovelace.input.outputIndex}`,
     `${ownerLovelace.input.txHash}#${ownerLovelace.input.outputIndex}`,
@@ -127,10 +131,26 @@ export async function buildSldMintTx(params: {
     `${tldRefTokenUtxo.input.txHash}#${tldRefTokenUtxo.input.outputIndex}`,
     `${collateral.input.txHash}#${collateral.input.outputIndex}`,
   ]);
-  const availableUtxos = plan.userUtxos.filter(
+  const extraUtxos = plan.userUtxos.filter(
     (u) => !claimedRefs.has(`${u.input.txHash}#${u.input.outputIndex}`)
   );
+  // When all user UTxOs are already manually added (e.g. userAddress === ownerAddress
+  // with few UTxOs), provide the full user UTxO set so the builder can see
+  // the value available.  The builder deduplicates against manually-added inputs,
+  // but we must still exclude collateral to prevent it from being selected as a normal input.
+  const collateralRef = `${collateral.input.txHash}#${collateral.input.outputIndex}`;
+  const availableUtxos = extraUtxos.length > 0
+    ? extraUtxos
+    : plan.userUtxos.filter((u) => `${u.input.txHash}#${u.input.outputIndex}` !== collateralRef);
   txBuilder.selectUtxosFrom(availableUtxos).changeAddress(plan.changeAddress);
+
+  // Set transaction TTL so it expires if not submitted within 60 minutes
+  const latestBlock = await provider.fetchLatestBlock();
+  const currentSlot = Number(latestBlock.slot);
+  if (!Number.isFinite(currentSlot) || currentSlot <= 0) {
+    throw new Error(`Failed to determine current slot from latest block (got: ${latestBlock.slot})`);
+  }
+  txBuilder.invalidHereafter(currentSlot + TX_TTL_SECONDS);
 
   const unsignedTx = await txBuilder.complete();
 

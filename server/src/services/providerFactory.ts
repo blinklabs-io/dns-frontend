@@ -23,6 +23,9 @@ type MeshProvider = {
   fetchUTxOs?: (hash: string, index?: number) => Promise<unknown[]>;
   submitTx?: (tx: unknown) => Promise<unknown>;
   fetchProtocolParameters?: (epoch?: number) => Promise<unknown>;
+  fetchAssetAddresses?: (asset: string) => Promise<{ address: string; quantity: string }[]>;
+  fetchBlockInfo?: (hash: string) => Promise<unknown>;
+  fetchLatestBlock?: () => Promise<unknown>;
 };
 
 /**
@@ -113,7 +116,11 @@ export class MeshProviderAdapter implements IFetcher {
   }
 
   async fetchAssetAddresses(asset: string): Promise<{ address: string; quantity: string }[]> {
-    throw new Error("fetchAssetAddresses not implemented");
+    const provider = await this.ensureProvider();
+    if (typeof provider.fetchAssetAddresses === "function") {
+      return provider.fetchAssetAddresses(asset);
+    }
+    throw new Error("Provider does not support fetchAssetAddresses");
   }
 
   async fetchAssetMetadata(asset: string): Promise<AssetMetadata> {
@@ -121,7 +128,19 @@ export class MeshProviderAdapter implements IFetcher {
   }
 
   async fetchBlockInfo(hash: string): Promise<BlockInfo> {
-    throw new Error("fetchBlockInfo not implemented");
+    const provider = await this.ensureProvider();
+    if (typeof provider.fetchBlockInfo === "function") {
+      return provider.fetchBlockInfo(hash) as Promise<BlockInfo>;
+    }
+    throw new Error("Provider does not support fetchBlockInfo");
+  }
+
+  async fetchLatestBlock(): Promise<BlockInfo> {
+    const provider = await this.ensureProvider();
+    if (typeof provider.fetchLatestBlock === "function") {
+      return provider.fetchLatestBlock() as Promise<BlockInfo>;
+    }
+    throw new Error("Provider does not support fetchLatestBlock");
   }
 
   async fetchCollectionAssets(policyId: string, cursor?: number | string): Promise<{ assets: Asset[]; next?: string | number | null }> {
@@ -329,6 +348,54 @@ export function createProvider(): MeshProviderAdapter {
             return await kupoProv.fetchProtocolParameters(epoch);
           }
           throw new Error("Neither Ogmios nor Kupo supports fetchProtocolParameters");
+        },
+
+        async fetchAssetAddresses(asset: string): Promise<{ address: string; quantity: string }[]> {
+          const kupoProv = kupoProvider as MeshProvider;
+          if (typeof kupoProv.fetchAssetAddresses === "function") {
+            try {
+              return await kupoProv.fetchAssetAddresses(asset);
+            } catch (err) {
+              console.warn("Kupo fetchAssetAddresses failed, falling back to Ogmios:", err);
+            }
+          }
+          const ogmiosProv = ogmiosProvider as MeshProvider;
+          if (typeof ogmiosProv.fetchAssetAddresses === "function") {
+            return await ogmiosProv.fetchAssetAddresses(asset);
+          }
+          throw new Error("Neither Kupo nor Ogmios supports fetchAssetAddresses");
+        },
+
+        async fetchBlockInfo(hash: string): Promise<unknown> {
+          const kupoProv = kupoProvider as MeshProvider;
+          if (typeof kupoProv.fetchBlockInfo === "function") {
+            try {
+              return await kupoProv.fetchBlockInfo(hash);
+            } catch (err) {
+              console.warn("Kupo fetchBlockInfo failed, falling back to Ogmios:", err);
+            }
+          }
+          const ogmiosProv = ogmiosProvider as MeshProvider;
+          if (typeof ogmiosProv.fetchBlockInfo === "function") {
+            return await ogmiosProv.fetchBlockInfo(hash);
+          }
+          throw new Error("Neither Kupo nor Ogmios supports fetchBlockInfo");
+        },
+
+        async fetchLatestBlock(): Promise<unknown> {
+          const ogmiosProv = ogmiosProvider as MeshProvider;
+          if (typeof ogmiosProv.fetchLatestBlock === "function") {
+            try {
+              return await ogmiosProv.fetchLatestBlock();
+            } catch (err) {
+              console.warn("Ogmios fetchLatestBlock failed, falling back to Kupo:", err);
+            }
+          }
+          const kupoProv = kupoProvider as MeshProvider;
+          if (typeof kupoProv.fetchLatestBlock === "function") {
+            return await kupoProv.fetchLatestBlock();
+          }
+          throw new Error("Neither Ogmios nor Kupo supports fetchLatestBlock");
         },
       } as MeshProvider;
     });

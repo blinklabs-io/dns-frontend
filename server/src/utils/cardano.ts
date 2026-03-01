@@ -14,8 +14,8 @@ export const MIN_LOVELACE = {
   TLD_REF: 2_000_000n,
   /** Minimum for owner UTxO with TLD user token */
   OWNER: 1_262_830n,
-  /** Minimum for SLD reference token UTxO */
-  SLD_REF: 1_435_230n,
+  /** Minimum for SLD reference token UTxO (includes inline datum with domain name; 2 ADA covers all name lengths) */
+  SLD_REF: 2_000_000n,
   /** Minimum for SLD user token UTxO */
   SLD_USER: 1_262_830n,
 } as const;

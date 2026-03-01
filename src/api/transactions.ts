@@ -115,7 +115,7 @@ export function planSldMint(payload: MintSldPlanRequest) {
 
 export interface MintSldPlanFullRequest extends MintSldPlanRequest {
   userAddress: string;
-  ownerAddress: string;
+  ownerAddress?: string;
   tldRefAddress: string;
   sldRefAddress: string;
   tldReferenceRef: { txHash: string; txIndex: number };
@@ -143,6 +143,23 @@ export function buildSldMint(payload: MintSldPlanFullRequest) {
   return postJSON<MintSldBuildResponse>("/api/transactions/mint-sld/build", payload);
 }
 
+// ---- SLD availability check -------------------------------------------------
+
+export interface CheckSldAvailabilityRequest {
+  csTld: string;
+  tldName: string;
+  sldName: string;
+  tldRefAddress: string;
+}
+
+export interface CheckSldAvailabilityResponse {
+  available: boolean;
+}
+
+export function checkSldAvailability(payload: CheckSldAvailabilityRequest) {
+  return postJSON<CheckSldAvailabilityResponse>("/api/transactions/mint-sld/check-availability", payload);
+}
+
 // ---- Reference refs helper --------------------------------------------------
 export interface ReferenceRefsRequest {
   tldRefAddress: string;
@@ -160,4 +177,20 @@ export interface ReferenceRefsResponse {
 
 export function fetchReferenceRefs(payload: ReferenceRefsRequest) {
   return postJSON<ReferenceRefsResponse>("/api/transactions/reference-refs", payload);
+}
+
+// ---- TLD owner lookup -------------------------------------------------------
+
+export interface TldOwnerResponse {
+  ownerAddress: string;
+  asset: string;
+}
+
+export async function lookupTldOwner(csTld: string, tldName: string): Promise<TldOwnerResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/transactions/tld-owner/${encodeURIComponent(csTld)}/${encodeURIComponent(tldName)}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Request failed ${res.status}: ${text}`);
+  }
+  return res.json() as Promise<TldOwnerResponse>;
 }
