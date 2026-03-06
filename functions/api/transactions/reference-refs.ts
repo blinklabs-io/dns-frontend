@@ -124,6 +124,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("Error fetching reference refs:", sanitizeForLog(message));
-    return jsonError("Failed to fetch reference refs", 500);
+    return jsonError("Failed to fetch reference refs", 500, sanitizeForLog(message));
   }
 };

@@ -28,6 +28,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("Error building SLD mint tx:", sanitizeForLog(message));
-    return jsonError("Failed to build SLD mint transaction", 500);
+    return jsonError("Failed to build SLD mint transaction", 500, sanitizeForLog(message));
   }
 };

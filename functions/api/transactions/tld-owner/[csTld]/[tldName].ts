@@ -33,6 +33,6 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("Error looking up TLD owner:", sanitizeForLog(message));
-    return jsonError("Failed to look up TLD owner", 500);
+    return jsonError("Failed to look up TLD owner", 500, sanitizeForLog(message));
   }
 };

@@ -64,6 +64,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       "Error checking SLD availability:",
       sanitizeForLog(message),
     );
-    return jsonError("Failed to check SLD availability", 500);
+    return jsonError("Failed to check SLD availability", 500, sanitizeForLog(message));
   }
 };

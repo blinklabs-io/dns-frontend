@@ -216,6 +216,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const isClientError =
       error instanceof SyntaxError ||
       /decode|invalid|parse|expected|unexpected|CBOR/i.test(message);
-    return jsonError("Failed to decode UTXOs", isClientError ? 400 : 500);
+    return jsonError(
+      "Failed to decode UTXOs",
+      isClientError ? 400 : 500,
+      sanitizeForLog(message),
+    );
   }
 };

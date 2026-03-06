@@ -30,6 +30,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       "Error building SLD mint plan:",
       sanitizeForLog(message),
     );
-    return jsonError("Failed to build SLD mint plan", 500);
+    return jsonError("Failed to build SLD mint plan", 500, sanitizeForLog(message));
   }
 };

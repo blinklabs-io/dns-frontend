@@ -81,6 +81,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       "Error preparing SLD mint artifacts:",
       sanitizeForLog(message),
     );
-    return jsonError("Failed to prepare SLD mint artifacts", 500);
+    return jsonError("Failed to prepare SLD mint artifacts", 500, sanitizeForLog(message));
   }
 };

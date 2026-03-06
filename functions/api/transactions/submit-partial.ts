@@ -282,8 +282,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         return jsonError("Invalid transaction format: expected 4-element CBOR array");
       }
       txArray = value;
-    } catch {
-      return jsonError("Failed to parse unsigned transaction CBOR");
+    } catch (error: unknown) {
+      const detail = extractSubmitErrorDetail(error);
+      return jsonError(
+        "Failed to parse unsigned transaction CBOR",
+        400,
+        sanitizeForLog(detail),
+      );
     }
 
     // Extract byte spans so we can preserve original body/tail bytes exactly
@@ -305,8 +310,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       } else {
         walletWitness = value;
       }
-    } catch {
-      return jsonError("Failed to parse witness set CBOR");
+    } catch (error: unknown) {
+      const detail = extractSubmitErrorDetail(error);
+      return jsonError(
+        "Failed to parse witness set CBOR",
+        400,
+        sanitizeForLog(detail),
+      );
     }
 
     if (!(walletWitness instanceof Map)) {
