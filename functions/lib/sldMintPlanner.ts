@@ -130,21 +130,23 @@ function extractSldListFromDatum(inlineDatum: unknown): string[] | null {
   if (!inlineDatum || typeof inlineDatum !== "object") return null;
   const datum = inlineDatum as Record<string, unknown>;
 
-  // Use Object.hasOwn to avoid collision with Object.prototype.constructor
-  if (!Object.hasOwn(datum, "constructor") || !Array.isArray(datum.fields)) return null;
+  // Use bracket access to avoid Object.prototype.constructor narrowing, but
+  // require an own property so prototypes cannot satisfy the datum shape.
+  if (!Object.prototype.hasOwnProperty.call(datum, "constructor") || !Array.isArray(datum.fields)) return null;
+  const rawConstructor = datum["constructor"];
 
   // Constructor can be a number, string, or BigInt depending on the deserializer
   let constructorValue: number;
-  if (typeof datum.constructor === "bigint") {
-    constructorValue = Number(datum.constructor);
-  } else if (typeof datum.constructor === "string") {
-    const trimmed = datum.constructor.trim();
+  if (typeof rawConstructor === "bigint") {
+    constructorValue = Number(rawConstructor);
+  } else if (typeof rawConstructor === "string") {
+    const trimmed = rawConstructor.trim();
     if (!/^[+-]?\d+$/.test(trimmed)) return null;
     const parsed = Number(trimmed);
     if (!Number.isInteger(parsed)) return null;
     constructorValue = parsed;
-  } else if (typeof datum.constructor === "number") {
-    constructorValue = datum.constructor;
+  } else if (typeof rawConstructor === "number") {
+    constructorValue = rawConstructor;
   } else {
     return null;
   }

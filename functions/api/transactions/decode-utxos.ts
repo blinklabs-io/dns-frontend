@@ -1,10 +1,8 @@
 /**
  * Decode CBOR-encoded UTxOs without WASM dependencies.
  *
- * This is the Pages Functions port of the Express `decodeUtxos` handler.
- * The original used CML (cardano-multiplatform-lib-nodejs) which relies on
- * WASM and cannot run in Cloudflare Workers.  We replace it with the pure-JS
- * `@stricahq/cbors` library that decodes the raw CBOR directly.
+ * Uses the pure-JS `@stricahq/cbors` library so decoding works in Cloudflare
+ * Workers without WASM dependencies.
  */
 
 import { Decoder } from "@stricahq/cbors";

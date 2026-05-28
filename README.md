@@ -1,12 +1,13 @@
 # dns-frontend
 
-A modern React frontend application built with Vite, TypeScript, and Tailwind CSS.
+A Cardano SLD (Second-Level Domain) minting dApp built with React, Vite, TypeScript, Tailwind CSS, and Cloudflare Pages Functions.
 
 ## Tech Stack
 
 - **React 19** - UI library
 - **TypeScript** - Type-safe JavaScript
-- **Vite** - Build tool and dev server
+- **Vite** - Build tool and frontend dev server
+- **Cloudflare Pages Functions** - Same-origin API under `/api/transactions`
 - **Tailwind CSS 4** - Utility-first CSS framework
 - **ESLint** - Code linting
 - **React Compiler** - Experimental React optimization
@@ -28,7 +29,13 @@ npm install
 Start the development server:
 npm run dev
 
-The application will be available at <http://localhost:5173>
+The frontend will be available at <http://localhost:5173>.
+
+For a local production-style run with the frontend and Pages Functions on the same origin:
+npm run build
+npm run functions:dev
+
+The Pages app and API will be available at <http://localhost:8788>.
 
 ### Build
 
@@ -47,7 +54,9 @@ npm run lint
 
 ## Project Structure
 
-The project follows a standard Vite + React structure with TypeScript and Tailwind CSS integration.
+- `src/` - React application and API client
+- `functions/api/transactions/` - Cloudflare Pages Function routes
+- `functions/lib/` - Shared API services and blockchain provider utilities
 
 ## Configuration
 
@@ -55,7 +64,3 @@ The project follows a standard Vite + React structure with TypeScript and Tailwi
 - **ESLint**: Uses recommended configs with React Hooks and React Refresh plugins
 - **Vite**: Includes React plugin with experimental React Compiler support
 - **Tailwind CSS**: v4 with PostCSS integration
-
-## Note
-
-This repository is currently a minimal React application scaffold. Please provide specific feature requirements or change requests for further development.

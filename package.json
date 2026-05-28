@@ -8,9 +8,6 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server:install": "cd server && npm install",
-    "server:dev": "cd server && npm run dev",
-    "server:start": "cd server && npm start",
     "functions:dev": "wrangler pages dev dist"
   },
   "dependencies": {

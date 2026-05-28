@@ -1,9 +1,5 @@
 /**
  * Shared validation helpers for SLD mint request endpoints.
- *
- * Ported from server/src/controllers/transactionController.ts
- * (validateSldMintRequest, resolveTldOwner, isValidMinLovelace,
- * parseAdaToLovelace).
  */
 
 import {

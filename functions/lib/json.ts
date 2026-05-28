@@ -1,9 +1,8 @@
 /**
  * JSON response helpers for Cloudflare Pages Functions.
  *
- * Replaces the Express `res.json()` / `res.status().json()` patterns
- * with Workers-native `Response.json()` calls, plus utility functions
- * for safe logging and BigInt serialization.
+ * Wraps Workers-native `Response.json()` calls, plus utility functions for
+ * safe logging and BigInt serialization.
  */
 
 /**
