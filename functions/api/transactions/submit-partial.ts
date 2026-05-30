@@ -1,10 +1,8 @@
 /**
  * Assemble an unsigned transaction with wallet-provided witnesses, then submit.
  *
- * This is the Pages Functions port of the Express `submitPartialTransaction`
- * handler.  The original used CML (cardano-multiplatform-lib-nodejs) which
- * relies on WASM and cannot run in Cloudflare Workers.  We replace it with
- * the pure-JS `@stricahq/cbors` library for CBOR encode/decode.
+ * Uses the pure-JS `@stricahq/cbors` library for CBOR encode/decode so the
+ * endpoint runs in Cloudflare Workers without WASM dependencies.
  *
  * IMPORTANT: The transaction body bytes must be preserved exactly as-is.
  * Re-encoding them through CBOR would change the byte representation

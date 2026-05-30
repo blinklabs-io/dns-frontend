@@ -14,11 +14,7 @@ import { normalizeAssetId } from "./cardano";
 import { sanitizeForLog } from "./json";
 
 /**
- * Provider Factory for Cardano blockchain access (Cloudflare Pages Functions port).
- *
- * Adapted from server/src/services/providerFactory.ts to accept an explicit
- * `env` parameter instead of reading `process.env`, making it compatible with
- * Cloudflare Workers / Pages Functions.
+ * Provider Factory for Cardano blockchain access in Cloudflare Pages Functions.
  *
  * Supported providers (set via MESH_PROVIDER env var):
  * - "blockfrost" (default): Requires BLOCKFROST_PROJECT_ID env var

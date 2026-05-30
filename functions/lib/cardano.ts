@@ -1,9 +1,7 @@
 /**
  * Shared Cardano utilities for address and asset handling.
  *
- * This is the Pages Functions port of server/src/utils/cardano.ts.
- * The WASM-based `lucid-cardano` dependency has been replaced with the
- * pure-JS `bech32` package so the code runs in Cloudflare Workers.
+ * Uses the pure-JS `bech32` package so the code runs in Cloudflare Workers.
  */
 
 import { bech32 } from "bech32";
