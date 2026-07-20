@@ -13,7 +13,7 @@
   "dependencies": {
     "@cardano-foundation/cardano-connect-with-wallet": "^0.2.22",
     "@cardano-foundation/cardano-connect-with-wallet-core": "^0.2.8",
-    "@meshsdk/common": "^1.9.0-beta.100",
+    "@meshsdk/common": "^1.9.1",
     "@meshsdk/core": "^1.9.0-beta.100",
     "@noble/hashes": "^2.0.1",
     "@stricahq/cbors": "^1.0.4",
