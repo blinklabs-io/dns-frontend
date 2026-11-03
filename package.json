@@ -19,7 +19,7 @@
     "@stricahq/cbors": "^1.0.4",
     "bech32": "^2.0.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260305.0",
