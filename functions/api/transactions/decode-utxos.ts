@@ -22,9 +22,8 @@ function hexToBuffer(hex: string): Buffer {
 
 /** Ensure a value is a Uint8Array regardless of whether cbors returned Buffer. */
 function toUint8Array(value: unknown): Uint8Array {
+  // Buffer extends Uint8Array, so this also accepts Buffer.
   if (value instanceof Uint8Array) return value;
-  // Buffer extends Uint8Array, but be defensive
-  if (Buffer.isBuffer(value)) return new Uint8Array(value);
   throw new Error("Expected bytes (Uint8Array or Buffer)");
 }
 
