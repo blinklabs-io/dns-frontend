@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "functions:dev": "wrangler pages dev dist"
+    "functions:dev": "wrangler pages dev dist",
+    "test": "node --test scripts/react-compiler.test.mjs"
   },
   "dependencies": {
     "@cardano-foundation/cardano-connect-with-wallet": "^0.2.22",
@@ -22,14 +23,17 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
     "@cloudflare/workers-types": "^5.20261103.1",
     "@eslint/js": "^10.0.1",
+    "@rolldown/plugin-babel": "^0.3.1",
     "@tailwindcss/postcss": "^4.3.3",
+    "@types/babel__core": "^7.20.5",
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.1.2",
-    "babel-plugin-react-compiler": "^19.1.0-rc.3",
+    "@vitejs/plugin-react": "^6.2.1",
+    "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^10.7.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.0",
